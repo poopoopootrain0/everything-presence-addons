@@ -8,7 +8,7 @@ ENV NODE_ENV=development
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
-RUN npm ci --include=dev
+RUN npm install --include=dev
 
 # Copy sources and build
 COPY backend backend
