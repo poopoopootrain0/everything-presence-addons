@@ -1,60 +1,63 @@
 ARG BUILD_FROM=ghcr.io/hassio-addons/base:19.0.0
 
+# -------------------------
+# Build Stage
+# -------------------------
 FROM node:20-alpine AS build
 WORKDIR /app
 ENV NODE_ENV=development
 
-# Copy workspace package files
+# Install root dependencies (hoisted devDeps will include tsc and vite)
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
-
-# Install all dependencies (including dev) offline
 RUN npm ci --include=dev
 
-# Add node_modules/.bin to PATH for local binaries (tsc, vite)
+# Add hoisted binaries to PATH
 ENV PATH=/app/node_modules/.bin:$PATH
 
-# Copy sources
+# Copy source code
 COPY backend backend
 COPY frontend frontend
 
-# Build backend and frontend
+# Build all workspaces
 RUN npm run build --workspaces
 
-# Prune devDependencies for production
+# Remove devDeps for production
 RUN npm prune --omit=dev --workspaces
 
-########################
-# Build addon image
-########################
+# -------------------------
+# Add-on Stage
+# -------------------------
 FROM ${BUILD_FROM} AS addon
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-WORKDIR /app
 ENV NODE_ENV=production \
     PORT=42069 \
     FIRMWARE_LAN_PORT=38080 \
     FRONTEND_DIST=/app/frontend/dist
+WORKDIR /app
 
-# Install node runtime only
+# Install runtime Node.js for production (optional if base image already has node)
 RUN apk add --no-cache nodejs npm
 
-# Copy built artifacts and runtime dependencies
+# Copy production artifacts
+COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/backend/package.json ./backend/package.json
 COPY --from=build /app/backend/dist ./backend/dist
 COPY --from=build /app/frontend/dist ./frontend/dist
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json /app/package-lock.json ./
 COPY config ./config
 COPY rootfs/ /
 
+# Make add-on scripts executable
 RUN rm -rf /etc/services.d/zone-configurator && \
     chmod +x /etc/s6-overlay/s6-rc.d/zone-configurator/run
 
 EXPOSE 42069/tcp 38080/tcp
 
-########################
-# Standalone image
-########################
+# -------------------------
+# Standalone Stage
+# -------------------------
 FROM node:20-alpine AS standalone
 WORKDIR /app
 ENV NODE_ENV=production \
@@ -62,16 +65,17 @@ ENV NODE_ENV=production \
     FIRMWARE_LAN_PORT=38080 \
     FRONTEND_DIST=/app/frontend/dist
 
+COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/backend/package.json ./backend/package.json
 COPY --from=build /app/backend/dist ./backend/dist
 COPY --from=build /app/frontend/dist ./frontend/dist
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json /app/package-lock.json ./
 COPY config ./config
 
 EXPOSE 42069/tcp 38080/tcp
 CMD ["node", "backend/dist/index.js"]
 
-########################
-# Default build target
-########################
+# -------------------------
+# Default Home Assistant Add-on
+# -------------------------
 FROM addon AS final
