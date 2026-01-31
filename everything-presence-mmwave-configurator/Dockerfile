@@ -15,26 +15,26 @@ COPY frontend/package.json frontend/package.json
 # Install root dependencies (hoisted)
 RUN npm ci --include=dev
 
-# Install workspace devDependencies locally to ensure binaries exist
+# Copy and install backend
 WORKDIR /app/backend
+COPY backend/package.json ./package.json
 RUN npm ci --include=dev
 
+# Copy and install frontend
 WORKDIR /app/frontend
+COPY frontend/package.json ./package.json
 RUN npm ci --include=dev
 
-# Add all local binaries to PATH
-ENV PATH=/app/node_modules/.bin:/app/backend/node_modules/.bin:/app/frontend/node_modules/.bin:$PATH
-
-# Copy source code
+# Copy sources
 WORKDIR /app
-COPY backend backend
-COPY frontend frontend
+COPY backend ./backend
+COPY frontend ./frontend
+
+# Add local binaries to PATH
+ENV PATH=/app/node_modules/.bin:/app/backend/node_modules/.bin:/app/frontend/node_modules/.bin:$PATH
 
 # Build all workspaces
 RUN npm run build --workspaces
-
-# Remove devDependencies for production
-RUN npm prune --omit=dev --workspaces
 
 # -------------------------
 # Addon Stage
