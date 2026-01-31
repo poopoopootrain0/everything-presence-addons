@@ -7,27 +7,37 @@ FROM node:20-alpine AS build
 WORKDIR /app
 ENV NODE_ENV=development
 
-# Install root dependencies (hoisted devDeps will include tsc and vite)
+# Copy root & workspace package files
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
+
+# Install root dependencies (hoisted)
 RUN npm ci --include=dev
 
-# Add hoisted binaries to PATH
-ENV PATH=/app/node_modules/.bin:$PATH
+# Install workspace devDependencies locally to ensure binaries exist
+WORKDIR /app/backend
+RUN npm ci --include=dev
+
+WORKDIR /app/frontend
+RUN npm ci --include=dev
+
+# Add all local binaries to PATH
+ENV PATH=/app/node_modules/.bin:/app/backend/node_modules/.bin:/app/frontend/node_modules/.bin:$PATH
 
 # Copy source code
+WORKDIR /app
 COPY backend backend
 COPY frontend frontend
 
 # Build all workspaces
 RUN npm run build --workspaces
 
-# Remove devDeps for production
+# Remove devDependencies for production
 RUN npm prune --omit=dev --workspaces
 
 # -------------------------
-# Add-on Stage
+# Addon Stage
 # -------------------------
 FROM ${BUILD_FROM} AS addon
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -37,19 +47,17 @@ ENV NODE_ENV=production \
     FRONTEND_DIST=/app/frontend/dist
 WORKDIR /app
 
-# Install runtime Node.js for production (optional if base image already has node)
 RUN apk add --no-cache nodejs npm
 
-# Copy production artifacts
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/backend/package.json ./backend/package.json
+COPY --from=build /app/backend/node_modules ./backend/node_modules
 COPY --from=build /app/backend/dist ./backend/dist
 COPY --from=build /app/frontend/dist ./frontend/dist
 COPY config ./config
 COPY rootfs/ /
 
-# Make add-on scripts executable
 RUN rm -rf /etc/services.d/zone-configurator && \
     chmod +x /etc/s6-overlay/s6-rc.d/zone-configurator/run
 
@@ -76,6 +84,6 @@ EXPOSE 42069/tcp 38080/tcp
 CMD ["node", "backend/dist/index.js"]
 
 # -------------------------
-# Default Home Assistant Add-on
+# Default Home Assistant Add-on build target
 # -------------------------
 FROM addon AS final
