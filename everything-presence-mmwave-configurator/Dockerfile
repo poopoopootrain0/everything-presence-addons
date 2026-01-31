@@ -1,5 +1,10 @@
 # -----------------------------
-# Build stage (local, optional)
+# ARG must come before any FROM if used in FROM
+# -----------------------------
+ARG BUILD_FROM=ghcr.io/hassio-addons/base:19.0.0
+
+# -----------------------------
+# Build stage
 # -----------------------------
 FROM node:20-alpine AS build
 WORKDIR /app
@@ -23,7 +28,6 @@ RUN npm run build --workspaces
 # -----------------------------
 # Add-on stage (offline-proof)
 # -----------------------------
-ARG BUILD_FROM=ghcr.io/hassio-addons/base:19.0.0
 FROM ${BUILD_FROM} AS addon
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /app
