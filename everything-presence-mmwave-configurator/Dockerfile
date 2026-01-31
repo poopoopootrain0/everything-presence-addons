@@ -8,7 +8,11 @@ ENV NODE_ENV=development
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
+# Install all dependencies including dev (needed for tsc & vite)
 RUN npm install --include=dev
+
+# Add node_modules/.bin to PATH so scripts find local binaries
+ENV PATH=/app/node_modules/.bin:$PATH
 
 # Copy sources and build
 COPY backend backend
