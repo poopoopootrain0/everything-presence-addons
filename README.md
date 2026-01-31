@@ -1,4 +1,4 @@
-# Everything Presence Add-ons
+# Everything Presence Add-ons copy
 
 [![Stars][stars-shield]][repo]  [![Release][release-shield]][release] [![Discord][discord-shield]][discord]
 
